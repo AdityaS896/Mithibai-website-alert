@@ -1,0 +1,25 @@
+name: Monitor Mithibai College Website
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-websites:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Mithibai Homepage
+        run: |
+          echo "Checking Mithibai Homepage..."
+          curl -L -s https://www.mithibai.ac.in/ -o homepage.html
+          echo "Homepage downloaded."
+          wc -c homepage.html
+
+      - name: Check Junior College Notices
+        run: |
+          echo "Checking Junior College Notices..."
+          curl -L -s https://www.mithibai.ac.in/notices/junior-notices/ -o junior-notices.html
+          echo "Junior Notices downloaded."
+          wc -c junior-notices.html
