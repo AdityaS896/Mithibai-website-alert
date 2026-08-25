@@ -5,11 +5,17 @@ on:
     - cron: "0 */3 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   check-websites:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Get previous files
+        uses: actions/checkout@v4
+
       - name: Download Mithibai Homepage
         run: |
           curl -L -s https://www.mithibai.ac.in/ -o homepage.html
@@ -18,14 +24,59 @@ jobs:
         run: |
           curl -L -s https://www.mithibai.ac.in/notices/junior-notices/ -o junior-notices.html
 
-      - name: Check files
+      - name: Extract visible text
         run: |
-          echo "Homepage size:"
-          wc -c homepage.html
-          echo "Junior Notices size:"
-          wc -c junior-notices.html
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
 
-      - name: Send test email
+          class TextExtractor(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.text = []
+
+              def handle_data(self, data):
+                  text = data.strip()
+                  if text:
+                      self.text.append(text)
+
+          for source, output in [
+              ("homepage.html", "homepage.txt"),
+              ("junior-notices.html", "junior-notices.txt")
+          ]:
+              parser = TextExtractor()
+              parser.feed(Path(source).read_text(errors="ignore"))
+              text = "\n".join(parser.text)
+              text = re.sub(r'\s+', ' ', text)
+              Path(output).write_text(text)
+          PY
+
+      - name: Check for changes
+        id: changes
+        run: |
+          changed=false
+
+          if [ -f previous-homepage.txt ]; then
+            if ! cmp -s homepage.txt previous-homepage.txt; then
+              changed=true
+            fi
+          else
+            changed=true
+          fi
+
+          if [ -f previous-junior-notices.txt ]; then
+            if ! cmp -s junior-notices.txt previous-junior-notices.txt; then
+              changed=true
+            fi
+          else
+            changed=true
+          fi
+
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Send email
+        if: steps.changes.outputs.changed == 'true'
         uses: dawidd6/action-send-mail@v6
         with:
           server_address: smtp.gmail.com
@@ -33,15 +84,37 @@ jobs:
           secure: true
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_APP_PASSWORD }}
-          subject: "Mithibai Website Tracker - Test Alert"
+          subject: "🔔 Mithibai College Website Update Detected"
           to: ${{ secrets.EMAIL_USERNAME }}
           from: ${{ secrets.EMAIL_USERNAME }}
           body: |
-            This is a test email from your Mithibai College website tracker.
+            A change has been detected on the Mithibai College website.
 
-            GitHub has successfully accessed:
+            Please check the following pages:
 
-            1. Mithibai College Homepage
-            2. Mithibai Junior College Notices
+            Homepage:
+            https://www.mithibai.ac.in/
 
-            Your email notification system is working.
+            Junior College Notices:
+            https://www.mithibai.ac.in/notices/junior-notices/
+
+            This is an automatic notification from your Mithibai Website Tracker.
+
+      - name: Save current versions
+        run: |
+          cp homepage.txt previous-homepage.txt
+          cp junior-notices.txt previous-junior-notices.txt
+
+      - name: Save monitoring files
+        run: |
+          git config user.name "Mithibai Website Tracker"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add previous-homepage.txt previous-junior-notices.txt
+
+          if git diff --cached --quiet; then
+            echo "No changes to save."
+          else
+            git commit -m "Update website monitoring snapshots"
+            git push
+          fi
