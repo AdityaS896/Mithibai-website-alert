@@ -10,16 +10,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check Mithibai Homepage
+      - name: Download Mithibai Homepage
         run: |
-          echo "Checking Mithibai Homepage..."
           curl -L -s https://www.mithibai.ac.in/ -o homepage.html
-          echo "Homepage downloaded."
-          wc -c homepage.html
 
-      - name: Check Junior College Notices
+      - name: Download Junior College Notices
         run: |
-          echo "Checking Junior College Notices..."
           curl -L -s https://www.mithibai.ac.in/notices/junior-notices/ -o junior-notices.html
-          echo "Junior Notices downloaded."
+
+      - name: Check files
+        run: |
+          echo "Homepage size:"
+          wc -c homepage.html
+          echo "Junior Notices size:"
           wc -c junior-notices.html
+
+      - name: Send test email
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_APP_PASSWORD }}
+          subject: "Mithibai Website Tracker - Test Alert"
+          to: ${{ secrets.EMAIL_USERNAME }}
+          from: ${{ secrets.EMAIL_USERNAME }}
+          body: |
+            This is a test email from your Mithibai College website tracker.
+
+            GitHub has successfully accessed:
+
+            1. Mithibai College Homepage
+            2. Mithibai Junior College Notices
+
+            Your email notification system is working.
